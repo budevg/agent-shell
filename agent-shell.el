@@ -349,7 +349,8 @@ HEARTBEAT, and AUTHENTICATE-REQUEST-MAKER."
         (cons :request-count 0)
         (cons :tool-calls nil)
         (cons :available-commands nil)
-        (cons :prompt-capabilities nil)))
+        (cons :prompt-capabilities nil)
+        (cons :pending-requests nil)))
 
 (defvar-local agent-shell--state
     (agent-shell--make-state))
@@ -2574,10 +2575,16 @@ If FILE-PATH is not an image, returns nil."
                         :body (agent-shell--stop-reason-description
                                (map-elt response 'stopReason))
                         :create-new t))
-                     (funcall (map-elt shell :finish-output) t))
-                   (agent-shell-heartbeat-stop
-                    :heartbeat (map-elt agent-shell--state :heartbeat)))
+                     (agent-shell-heartbeat-stop
+                      :heartbeat (map-elt agent-shell--state :heartbeat))
+                     (unless success
+                       (agent-shell--display-pending-requests))
+                     (funcall (map-elt shell :finish-output) t)
+                     (when success
+                       (agent-shell--process-pending-request))))
      :on-failure (lambda (error raw-message)
+                   ;; Display pending requests on failure.
+                   (agent-shell--display-pending-requests)
                    (funcall (agent-shell--make-error-handler :state agent-shell--state :shell shell)
                             error raw-message)
                    (agent-shell-heartbeat-stop
@@ -3939,6 +3946,121 @@ Includes STATUS, TITLE, KIND, DESCRIPTION, COMMAND, and OUTPUT."
                 "```" "```")
    "\n"
    "```"))
+
+;;; Queueing
+
+(cl-defun agent-shell--process-pending-request ()
+  "Process the next pending request from the queue if available."
+  (unless (derived-mode-p 'agent-shell-mode)
+    (error "Not in a shell"))
+  (when-let ((pending (map-elt agent-shell--state :pending-requests))
+             (next-request (car pending)))
+    (map-put! agent-shell--state :pending-requests (cdr pending))
+    (agent-shell--insert-to-shell-buffer
+     :text next-request
+     :submit t
+     :no-focus t)))
+
+(defun agent-shell--display-pending-requests ()
+  "Display pending requests in the shell buffer if queue is not empty."
+  (unless (derived-mode-p 'agent-shell-mode)
+    (error "Not in a shell"))
+  (unless (seq-empty-p (map-elt agent-shell--state :pending-requests))
+    (agent-shell--update-fragment
+     :state (agent-shell--state)
+     :block-id (format "%s-pending-requests"
+                       (map-elt (agent-shell--state) :request-count))
+     :body (format "Pending requests: %d
+
+%s
+
+Resume: M-x agent-shell-resume-pending-requests
+Remove: M-x agent-shell-remove-pending-request
+"
+                   (seq-length (map-elt agent-shell--state :pending-requests))
+                   (mapconcat
+                    (lambda (idx-req)
+                      (let* ((req (car idx-req))
+                             (idx (cdr idx-req))
+                             (first-line (car (split-string req "\n" t))))
+                        (format "  %d: \"%s\""
+                                (1+ idx)
+                                (truncate-string-to-width first-line 80 nil nil "..."))))
+                    (seq-map-indexed #'cons (map-elt agent-shell--state :pending-requests))
+                    "\n"))
+     :create-new t)))
+
+(cl-defun agent-shell--enqueue-request (&key prompt)
+  "Add PROMPT to the pending requests queue."
+  (unless (derived-mode-p 'agent-shell-mode)
+    (error "Not in a shell"))
+  (let ((pending (map-elt agent-shell--state :pending-requests)))
+    (map-put! agent-shell--state :pending-requests
+              (append pending (list prompt)))
+    (message "Request queued (%d pending)" (length (map-elt agent-shell--state :pending-requests)))))
+
+(defun agent-shell-queue-request (prompt)
+  "Queue or immediately send a request depending on shell busy state.
+
+Read PROMPT from the minibuffer.  If the shell is busy, add it to the pending
+requests queue.  Otherwise, submit it immediately.  Queued requests will be
+automatically sent when the current request completes."
+  (interactive
+   (progn
+     (unless (derived-mode-p 'agent-shell-mode)
+       (error "Not in a shell"))
+     (list (read-string (or (map-nested-elt (agent-shell--state) '(:agent-config :shell-prompt))
+                            "Enqueue request: ")))))
+  (if (shell-maker-busy)
+      (agent-shell--enqueue-request :prompt prompt)
+    (agent-shell--insert-to-shell-buffer :text prompt :submit t :no-focus t)))
+
+(defun agent-shell-resume-pending-requests ()
+  "Resume processing pending requests in the queue."
+  (interactive)
+  (unless (derived-mode-p 'agent-shell-mode)
+    (error "Not in a shell"))
+  (when (seq-empty-p (map-elt agent-shell--state :pending-requests))
+    (user-error "No pending requests"))
+  (if (shell-maker-busy)
+      (message "Shell is busy, requests will auto-resume when ready")
+    (agent-shell--process-pending-request)))
+
+(defun agent-shell-remove-pending-request (&optional remove-index)
+  "Remove all pending requests or a specific request by REMOVE-INDEX.
+
+When called interactively with pending requests, prompt to either remove all
+or select a specific request to remove."
+  (interactive
+   (let ((pending (map-elt agent-shell--state :pending-requests)))
+     (unless (derived-mode-p 'agent-shell-mode)
+       (error "Not in a shell"))
+     (when (seq-empty-p pending)
+       (user-error "No pending requests"))
+     (let* ((choices (append
+                      '(("Remove all" . remove-all))
+                      (seq-map-indexed
+                       (lambda (req idx)
+                         (cons (format "%d: %s" (1+ idx)
+                                       (truncate-string-to-width req 60 nil nil "..."))
+                               idx))
+                       pending)))
+            (selection (cdr (assoc (completing-read "Remove: " choices nil t) choices))))
+       (list (unless (eq selection 'remove-all) selection)))))
+  (if remove-index
+      (when-let* ((confirmed (y-or-n-p (format "Remove? \"%s\""
+                                               (nth remove-index
+                                                    (map-elt agent-shell--state :pending-requests)))))
+                  (pending (map-elt agent-shell--state :pending-requests))
+                  (new-pending (append (seq-take pending remove-index)
+                                       (seq-drop pending (1+ remove-index)))))
+        (map-put! agent-shell--state :pending-requests new-pending)
+        (message "Removed (%d remaining)"
+                 (length new-pending)))
+    (when (y-or-n-p (format "Remove %d pending requests? "
+                            (length (map-elt agent-shell--state :pending-requests))))
+      (map-put! agent-shell--state :pending-requests nil)
+      (message "Removed all pending requests"))))
 
 (provide 'agent-shell)
 
