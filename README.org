@@ -31,6 +31,7 @@ With agent-shell, you can chat with the likes of Gemini CLI, Claude Code, or any
 - [[https://github.com/jethrokuan/agent-shell-manager][agent-shell-manager]]: Tabulated view and management of =agent-shell= buffers.
 - [[https://github.com/cmacrae/agent-shell-sidebar][agent-shell-sidebar]]: A sidebar add-on for =agent-shell=.
 - [[https://github.com/nineluj/agent-review][agent-review]]: Code review interface for =agent-shell=.
+- [[https://github.com/ultronozm/agent-shell-attention.el][agent-shell-attention.el]]: Mode-line attention tracker for =agent-shell=.
 
 * Setup
 
