@@ -1067,7 +1067,7 @@ See https://containers.dev for more information on devcontainers."
   (let ((devcontainer-config-file-name (expand-file-name ".devcontainer/devcontainer.json" cwd)))
     (condition-case _err
         (map-elt (json-read-file devcontainer-config-file-name) 'workspaceFolder
-                 (concat "/workspaces/" (file-name-nondirectory (directory-file-name cwd))))
+                 (concat "/workspaces/" (file-name-nondirectory (directory-file-name cwd)) "/"))
       (file-missing (error "Not found: %s" devcontainer-config-file-name))
       (permission-denied (error "Not readable: %s" devcontainer-config-file-name))
       (json-string-format (error "No valid JSON: %s" devcontainer-config-file-name)))))
