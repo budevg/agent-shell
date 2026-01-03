@@ -871,6 +871,11 @@ Flow:
                            (agent-shell--get-available-modes state)))
                  ;; Note: No need to set :last-entry-type as no text was inserted.
                  (agent-shell--update-header-and-mode-line)))
+              ((equal (map-elt update 'sessionUpdate) "config_option_update")
+               ;; Silently handle config option updates (e.g., from set_model/set_mode)
+               ;; These are informational notifications that don't require user-visible output
+               ;; Note: No need to set :last-entry-type as no text was inserted.
+               nil)
               (t
                (agent-shell--update-fragment
                 :state state
