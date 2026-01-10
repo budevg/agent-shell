@@ -716,11 +716,17 @@ Flow:
                (agent-shell--save-tool-call
                 state
                 (map-elt update 'toolCallId)
-                (append (list (cons :title (if (and (string= (map-elt update 'title) "Skill")
-                                                    (map-nested-elt update '(rawInput command)))
-                                               (format "Skill: %s"
-                                                       (map-nested-elt update '(rawInput command)))
-                                             (map-elt update 'title)))
+                (append (list (cons :title (cond
+                                            ((and (string= (map-elt update 'title) "Skill")
+                                                  (map-nested-elt update '(rawInput command)))
+                                             (format "Skill: %s"
+                                                     (map-nested-elt update '(rawInput command))))
+                                            ((and (string= (map-elt update 'title) "bash")
+                                                  (map-nested-elt update '(rawInput command)))
+                                             (format "bash: %s"
+                                                     (map-nested-elt update '(rawInput command))))
+                                            (t
+                                             (map-elt update 'title))))
                               (cons :status (map-elt update 'status))
                               (cons :kind (map-elt update 'kind))
                               (cons :command (map-nested-elt update '(rawInput command)))
