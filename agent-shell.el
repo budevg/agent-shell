@@ -1114,6 +1114,17 @@ If the buffer's file has changed, prompt the user to reload it."
                    :error (acp-make-error
                            :code -32603
                            :message "Operation cancelled by user"))))
+      (file-missing
+       ;; File doesn't exist - return RESOURCE_NOT_FOUND (-32002).
+       ;; This allows agents to distinguish "file not found" from actual errors.
+       (acp-send-response
+        :client (map-elt state :client)
+        :response (acp-make-fs-read-text-file-response
+                   :request-id .id
+                   :error (acp-make-error
+                           :code -32002
+                           :message "Resource not found"
+                           :data `((path . ,(nth 3 err)))))))
       (error
        (acp-send-response
         :client (map-elt state :client)
