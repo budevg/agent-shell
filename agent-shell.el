@@ -424,9 +424,18 @@ HEARTBEAT, and AUTHENTICATE-REQUEST-MAKER."
 (defun agent-shell (&optional new-shell)
   "Start or reuse an existing agent shell.
 
+`agent-shell' carries some DWIM (do what I mean) behaviour.
+
 If in a project without a shell, offer to create one.
 
 If already in a shell, invoke `agent-shell-toggle'.
+
+If a region is active or point is on relevant context (ie.
+`dired' files or image buffers), carry them over to the
+shell input.
+
+See `agent-shell-context-sources' on how to control DWIM
+behaviour.
 
 With prefix argument NEW-SHELL, force start a new shell."
   (interactive "P")
