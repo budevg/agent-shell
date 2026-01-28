@@ -3184,6 +3184,7 @@ For example:
 
        ⚠ Tool Permission ⚠
 
+       Add more cowbell
 
        [ View (v) ] [ Allow (y) ] [ Reject (n) ] [ Always Allow (!) ]
 
