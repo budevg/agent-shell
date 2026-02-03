@@ -63,6 +63,7 @@
 (require 'agent-shell-pi)
 (require 'agent-shell-project)
 (require 'agent-shell-qwen)
+(require 'agent-shell-worktree)
 (require 'agent-shell-ui)
 (require 'agent-shell-viewport)
 (require 'image)
